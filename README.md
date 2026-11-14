@@ -132,9 +132,16 @@ docker build -t ledger .
 docker run -p 7860:7860 -e GROQ_API_KEY=... -e DEMO_ACCESS_CODE=choose-a-code ledger
 ```
 
-On **Hugging Face Spaces**: create a Space with the Docker SDK, push this repo's files to it with
-`deploy/huggingface/README.md` as its `README.md` (that file carries the Space settings), and add
-`GROQ_API_KEY`, `DEMO_ACCESS_CODE` and optionally `GEMINI_API_KEY` under *Settings → Variables and secrets*.
+On **Hugging Face Spaces**: create a Space with the Docker SDK (blank template), add `GROQ_API_KEY`,
+`DEMO_ACCESS_CODE` and optionally `GEMINI_API_KEY` under *Settings → Variables and secrets*, then push:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File deploy\huggingface\push_to_space.ps1 -HfUser <your-hf-username>
+```
+
+The script sends only committed files, uses `deploy/huggingface/README.md` as the Space's README (it holds the
+Space settings), and leaves out the PDFs and video, which the app doesn't need. Git asks for your Hugging Face
+username and a write-access token.
 
 ## Tests
 
