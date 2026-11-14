@@ -1,0 +1,4 @@
+# Python 3.11. Install with: pip install -r requirements.txt
+# Everything else (server, UI, Gemini backup, .env loading) uses the standard library.
+groq==1.7.0       # Groq API client: the LLM
+pymupdf==1.28.2   # PDF reading: text, fonts, bookmarks

@@ -1,0 +1,18 @@
+# Secrets: API keys live only in the local .env (see .env.example)
+.env
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Run output: every question writes a JSONL trace here
+traces/
+
+# Local-only material, not part of the project
+.claude/
+CLAUDE.md
+CSCI415009_V2.pdf
+TheTechCrowd_submission/
+preparation/
+linkedin_post/

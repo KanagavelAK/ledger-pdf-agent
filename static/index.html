@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ledger · budgeted document agent</title>
+<link rel="stylesheet" href="./app.css">
+</head>
+<body>
+<header class="masthead">
+  <div class="brand">
+    <span class="mark" aria-hidden="true">L</span>
+    <div>
+      <h1>Ledger</h1>
+      <p>Answers from your PDF in at most six reads. Every claim is quoted.</p>
+    </div>
+  </div>
+  <div class="actions">
+    <label class="model-pick" title="Switch to Gemini if Groq's rate limit is reached; applies from the next question">
+      <span>Model</span>
+      <select id="provider" aria-label="Model"></select>
+    </label>
+    <label class="upload-btn">
+      <input id="file" type="file" accept="application/pdf,.pdf" hidden>
+      <span>Upload PDF</span>
+    </label>
+  </div>
+</header>
+
+<section id="doc" class="doc-strip" hidden></section>
+
+<main class="layout">
+  <section class="chat" aria-label="Conversation">
+    <div id="thread" class="thread" aria-live="polite">
+      <div id="empty" class="drop">
+        <p class="drop-title">Drop a PDF here</p>
+        <p id="empty-text">or use “Upload PDF”. The agent reads it only through four tools: contents, search, one page at a time, document list.</p>
+        <ul class="rules">
+          <li><b>6</b> reads per question</li>
+          <li><b>Quoted</b> or it declines</li>
+          <li><b>Never</b> obeys the document</li>
+        </ul>
+      </div>
+    </div>
+    <form id="ask" class="ask">
+      <textarea id="q" rows="2" placeholder="Upload a PDF first" disabled></textarea>
+      <button id="send" type="submit" disabled>Ask</button>
+    </form>
+  </section>
+
+  <aside class="ledger" aria-label="Call ledger">
+    <h2>Call ledger</h2>
+    <p id="ledger-q" class="ledger-q">No question yet</p>
+    <div id="meter" class="meter"></div>
+    <p id="meter-text" class="meter-text">0 of 6 reads used</p>
+    <ol id="calls" class="calls"></ol>
+    <a id="trace-link" class="trace-link" hidden>Download full trace (JSONL)</a>
+  </aside>
+</main>
+
+<script src="./app.js"></script>
+</body>
+</html>
