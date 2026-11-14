@@ -31,10 +31,44 @@ async function checkBackend() {
   try {
     state.health = await (await fetch("/api/health")).json();
     fillModelMenu(state.health);
+    setUpAccessCode(state.health);
     reportModel();
   } catch (err) {
     showDocMessage(friendly(err), true);
   }
+}
+
+// ---------------------------------------------------------------- access code (hosted demo only)
+// A hosted demo sets DEMO_ACCESS_CODE so strangers can't spend its API quota. The code goes in a header on
+// every API request; the server only says whether one is needed, never what it is.
+
+const apiHeaders = (extra = {}) => (state.code ? { ...extra, "X-Access-Code": state.code } : extra);
+
+function setUpAccessCode(h) {
+  $("code-pick").hidden = !h.access_code;
+  if (!h.access_code) return;
+  try { state.code = localStorage.getItem("access-code") || ""; } catch { state.code = ""; }
+  $("code").value = state.code;
+}
+
+$("code").addEventListener("change", () => {
+  state.code = $("code").value.trim();
+  try { localStorage.setItem("access-code", state.code); } catch { /* not remembered: fine */ }
+  reportModel();
+});
+
+// The trace is a download link; with an access code it must be fetched with the header, then saved.
+async function downloadTrace(e) {
+  if (!state.code) return;  // no code needed: the plain link works
+  e.preventDefault();
+  const url = e.currentTarget.href;
+  const res = await fetch(url, { headers: apiHeaders() });
+  if (!res.ok) return showDocMessage("Could not download the trace: check the access code.", true);
+  const a = el("a");
+  a.href = URL.createObjectURL(await res.blob());
+  a.download = url.split("/").pop() + ".jsonl";
+  a.click();
+  URL.revokeObjectURL(a.href);
 }
 
 // ---------------------------------------------------------------- model menu (Groq, or the Gemini backup)
@@ -70,6 +104,8 @@ function reportModel() {
   if (!p || !p.key_set) {
     showDocMessage(`${KEY_VARS[name] || "The API key"} is not set: questions will fail. Paste it into the .env ` +
       "file next to server.py (or set it in the server's terminal), then restart the server.", true);
+  } else if (h.access_code && !state.code) {
+    showDocMessage("This demo is protected: enter the access code at the top right, then upload a PDF.", true);
   } else if (!state.doc) {
     showDocMessage(`Backend ready · ${LABELS[name] || name} · ${p.model} · ${h.budget} reads per question · ` +
       "upload a PDF to start");
@@ -95,7 +131,7 @@ async function upload(file) {
   try {
     const res = await fetch("/api/upload", {
       method: "POST",
-      headers: { "X-Filename": encodeURIComponent(file.name), "Content-Type": "application/pdf" },
+      headers: apiHeaders({ "X-Filename": encodeURIComponent(file.name), "Content-Type": "application/pdf" }),
       body: file,
     });
     const data = await res.json();
@@ -167,7 +203,7 @@ async function ask(question) {
   try {
     const res = await fetch("/api/ask", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: apiHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ doc_id: state.doc.doc_id, question, history: state.history.slice(-3),
                              provider: $("provider").value }),  // the model menu: Groq or the Gemini backup
     });
@@ -288,6 +324,7 @@ function renderAnswer(run) {
   if (r.trace_url) {
     const a = el("a", null, "trace");
     a.href = r.trace_url;
+    a.addEventListener("click", downloadTrace);
     foot.append(a);
   }
   card.append(foot);
@@ -425,5 +462,6 @@ function describeResult(ev) {
   return "";
 }
 
+$("trace-link").addEventListener("click", downloadTrace);
 resetLedger();
 checkBackend();

@@ -1,0 +1,14 @@
+# Never copy secrets or local material into the image
+.env
+.git
+.venv/
+__pycache__/
+traces/
+.claude/
+CLAUDE.md
+CSCI415009_V2.pdf
+TheTechCrowd_submission/
+preparation/
+linkedin_post/
+docs/
+deploy/

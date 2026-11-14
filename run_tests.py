@@ -783,6 +783,68 @@ def check_server_end_to_end():
         server.LLM_FACTORY, server.TRACE_DIR = old
 
 
+def check_hosted_demo_access_code():
+    # Hosted demo (Hugging Face Spaces): anyone with the link could spend our API quota, so DEMO_ACCESS_CODE
+    # locks every API route. The page and the health check stay open so the UI can ask for the code.
+    import os
+    import threading
+    import urllib.error
+    import urllib.request
+    from http.server import ThreadingHTTPServer
+
+    import server
+    old = server.LLM_FACTORY, server.TRACE_DIR, server.ACCESS_CODE
+    server.TRACE_DIR, server.ACCESS_CODE = Path("traces/tests"), "open-sesame"
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{srv.server_address[1]}"
+
+    def request(path, data=None, code=None, headers=None):
+        h = dict(headers or {}, **({"X-Access-Code": code} if code is not None else {}))
+        return urllib.request.urlopen(urllib.request.Request(base + path, data=data, headers=h,
+                                                             method="POST" if data is not None else "GET"))
+
+    def refused(fn):
+        try:
+            fn()
+        except urllib.error.HTTPError as e:
+            return e.code, json.loads(e.read())["error"]
+        raise AssertionError("expected the request to be refused")
+
+    try:
+        assert "<title>" in request("/").read().decode(), "the page itself stays public"
+        assert json.loads(request("/api/health").read())["access_code"] is True, "health says a code is needed"
+        pdf, name = make_test_pdf(), {"X-Filename": "handbook.pdf"}
+        assert refused(lambda: request("/api/upload", pdf, headers=name))[0] == 401
+        assert refused(lambda: request("/api/upload", pdf, code="guess", headers=name)) == (401, "Wrong access code.")
+        did = json.loads(request("/api/upload", pdf, code="open-sesame", headers=name).read())["doc_id"]
+        body = json.dumps({"doc_id": did, "question": "What is the notice period?"}).encode()
+        assert refused(lambda: request("/api/ask", body))[0] == 401, "asking costs quota: locked"
+        server.LLM_FACTORY = lambda provider: ScriptedLLM([{"tool_calls": [PAGE(3)]}, FINAL("30 days", Q3)])
+        result = json.loads(request("/api/ask", body, code="open-sesame").read().decode().splitlines()[-1])
+        assert result["status"] == "success", result
+        assert refused(lambda: request(result["trace_url"]))[0] == 401, "traces hold document text: locked"
+        assert '"event": "end"' in request(result["trace_url"], code="open-sesame").read().decode()
+    finally:
+        srv.shutdown()
+        server.LLM_FACTORY, server.TRACE_DIR, server.ACCESS_CODE = old
+
+    # Host and port: local-only by default; a container sets HOST / PORT; command-line flags win.
+    saved = {k: os.environ.pop(k, None) for k in ("HOST", "PORT")}
+    try:
+        a = server.parse_args([])
+        assert (a.host, a.port) == ("127.0.0.1", 8000), "default: this machine only"
+        os.environ.update(HOST="0.0.0.0", PORT="7860")
+        a = server.parse_args([])
+        assert (a.host, a.port) == ("0.0.0.0", 7860), (a.host, a.port)
+        assert server.parse_args(["--port", "9000"]).port == 9000
+    finally:
+        for k, v in saved.items():
+            os.environ.pop(k, None)
+            if v is not None:
+                os.environ[k] = v
+
+
 UNIT_CHECKS = [
     ("docstore: headings from PDF outline", check_outline_headings),
     ("docstore: headings from font size (no outline)", check_font_headings),
@@ -825,6 +887,7 @@ UNIT_CHECKS = [
     ("gemini backup: paces to the free tier's 5 requests/minute (live 429)", check_gemini_request_pacing),
     ("backend: live event stream (and a closed tab never breaks a run)", check_on_event_stream),
     ("backend: HTTP server upload -> ask stream -> trace, errors, no escapes", check_server_end_to_end),
+    ("hosting: access code locks upload/ask/trace; HOST/PORT from env", check_hosted_demo_access_code),
 ]
 
 def FINAL(answer: str, *cites: tuple[int, str], status: str = "answered") -> dict:

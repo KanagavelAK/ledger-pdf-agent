@@ -21,7 +21,7 @@ the PDF only through 4 tools, with at most 6 tool calls per question plus 1 fina
 | Frontend | Plain HTML + CSS + JS (no framework, no build) | Distinctive "Ledger" look; live 6-call budget meter and call ledger |
 | PDF parsing | PyMuPDF (`pymupdf`) | Text, bookmarks and font sizes in one library (heading fallbacks need all three) |
 | Keyword search | Positional inverted index in plain Python (`dict`, `bisect`) | Keyword-only as required; fast; enables phrase, prefix and typo matching |
-| Agent loop | Plain Python (`harness.py`) | Frameworks are banned; every line explainable; 63 offline tests pass |
+| Agent loop | Plain Python (`harness.py`) | Frameworks are banned; every line explainable; 64 offline tests pass |
 | LLM | Groq API, `openai/gpt-oss-120b`, `groq` SDK; backup: Gemini (`gemini_llm.py`, standard library) | Fast for a live demo, free tier, open-weight; harness handles its quirks. The backup is switchable per question when Groq's rate limit is hit |
 | Safety | Regex + checks in code | Deterministic and explainable |
 | Call logging | `log_calls` wrapper in `harness.py`, a stand-in for the organisers' wrapper (swap theirs in when received) | Required; the official tool-call count |
@@ -44,7 +44,7 @@ RAP-offer/
   gemini_llm.py      backup model client (Gemini), same interface as GroqLLM                (~110 lines)
   server.py          backend: serves the UI, /api/health, /api/upload, /api/ask (NDJSON), /api/trace
   static/            frontend: index.html, app.css, app.js ("Ledger" UI with live call ledger)
-  run_tests.py       63 offline checks + 9 live cases; test PDFs generated in code
+  run_tests.py       64 offline checks + 9 live cases; test PDFs generated in code
   check_models.py    which Groq models this key can use (tokens/minute limit, tool calling)
   CSCI415009_V2.pdf  organisers' sample PDF
   .env               local API keys (filled in by us; never zipped)
@@ -294,7 +294,7 @@ Groq's free plan allows 8K tokens/min on every usable model, and a hard question
 *Changed from the Streamlit plan:* every Streamlit app looks the same, and a separate backend/frontend makes
 the live call ledger possible. The backend uses only Python's built-in `http.server`, so nothing new to install.
 
-**Backend (`server.py`, standard library, binds to 127.0.0.1 only):**
+**Backend (`server.py`, standard library, local-only by default):**
 
 | Endpoint | In | Out |
 |---|---|---|
@@ -308,6 +308,11 @@ the live call ledger possible. The backend uses only Python's built-in `http.ser
 - Errors such as a missing API key come back as an `{"type": "error"}` line, shown in the chat.
 - At startup the server prints whether each API key is set (`set` / `MISSING`, never the value).
 - Live-demo traces go to `traces/live_demo/` (`--trace-dir` to change, e.g. a separate folder for the judging run).
+- **Hosting (added after the hackathon).** `--host` / `--port` default to the `HOST` / `PORT` environment variables,
+  else `127.0.0.1:8000`; the `Dockerfile` sets `0.0.0.0:7860` for Hugging Face Spaces. A hosted copy spends our API
+  quota, so `DEMO_ACCESS_CODE` locks upload, ask and trace downloads (401 without the right `X-Access-Code` header,
+  compared with `hmac.compare_digest`). The page and `/api/health` stay open; health only says whether a code is
+  needed, and the UI shows an access-code box when it is.
 
 **Frontend (`static/index.html`, `app.css`, `app.js`, no framework, no build step), "Ledger" theme: paper and ink:**
 - **Header:** a **Model** menu (Groq, or Gemini backup) filled from `/api/health`; the page checks the backend on load, so a stopped server or a missing key shows a plain-language message before any question.
@@ -352,7 +357,7 @@ The PDF has bookmarks; a variant without bookmarks tests the font fallback. `lay
 cases: bold headings at body size (Word export), bookmarks holding only the title, a cover-page title, a table, and
 white 2 pt hidden text that contradicts the visible fact.
 
-**Offline: 63 checks (41 unit checks + 22 scripted agent cases, `ScriptedLLM`), `python run_tests.py`:**
+**Offline: 64 checks (42 unit checks + 22 scripted agent cases, `ScriptedLLM`), `python run_tests.py`:**
 
 | Group | Checks |
 |---|---|
@@ -361,7 +366,7 @@ white 2 pt hidden text that contradicts the visible fact.
 | Tools | exactly 4 tools with schemas from type hints; each tool's errors (unknown doc, page out of range, digit string, bad keyword); the call log records every call that reaches a tool |
 | Harness | fence + flags + budget line; output format; evidence check (case/space, ellipsis, line breaks, unread page, too short, hyphen look-alikes); history is text only; forced final uses `tool_choice="none"`; 2 repeats force the answer; the last turn is a forced answer and a failed check there declines; `.env` loading; Groq SDK retries off; deadlines; `Retry-After`; tokens-per-minute pacing; fake `json` tool labelled |
 | Gemini backup | request shape (no temperature); 429 `retryDelay`; missing key; thought signature echoed; 503 fallback; 5 requests/minute pacing |
-| Backend | live event stream (a closed tab never breaks a run); HTTP upload → ask stream → trace, provider switch, errors, no file escapes |
+| Backend | live event stream (a closed tab never breaks a run); HTTP upload → ask stream → trace, provider switch, errors, no file escapes; access code locks upload/ask/trace, host and port from the environment |
 | Agent cases | happy path; multi-page + amendment; not in document; empty and injected input rejected; injection inside a page; 7th call refused; 8 calls in one turn; repeat blocked; step cap; made-up quote fixed or downgraded; hidden text quoted → downgraded; unread page; tool failure and unknown tool recovered; missing citations fixed; persistent bad output; fake `json` tool recovered; permanent 404 fails fast |
 
 Offline tests always swap in a dummy API key, even when a real key is loaded from `.env`, so they never call a real

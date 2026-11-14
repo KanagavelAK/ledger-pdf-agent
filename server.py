@@ -12,11 +12,14 @@ Standard library only (http.server), so there is no web framework to install or 
 Providers: "groq" (default) and "gemini" (backup, gemini_llm.py). The UI's model menu picks one per question.
 
 Run:  python server.py        (needs GROQ_API_KEY in .env or the terminal)  then open http://127.0.0.1:8000
+Hosted demo (e.g. Hugging Face Spaces): HOST=0.0.0.0, PORT=7860, and DEMO_ACCESS_CODE set, so only people
+given the code can spend the API quota. Without DEMO_ACCESS_CODE nothing is locked (local use).
 """
 
 from __future__ import annotations
 
 import argparse
+import hmac
 import json
 import os
 import re
@@ -42,6 +45,7 @@ PROVIDERS = {  # name -> (model, environment variable holding its key); the UI's
     "gemini": (GEMINI_MODEL, "GEMINI_API_KEY"),  # backup when Groq's rate limit is reached
 }
 MAX_ASK_BYTES = 64 * 1024             # a question + short history is far smaller than this
+ACCESS_CODE = os.getenv("DEMO_ACCESS_CODE", "")  # "" = open (local use); set on a public host to protect the quota
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -55,8 +59,11 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, (STATIC_DIR / name).read_bytes(), content_type)
         if self.path == "/api/health":  # the UI checks this on load, so a missing key shows before any question
             return self._json(200, {"ok": True, "budget": harness.TOOL_BUDGET, "default_provider": harness.PROVIDER,
+                                    "access_code": bool(ACCESS_CODE),  # whether one is needed, never the code
                                     "providers": {name: {"model": model, "key_set": bool(os.environ.get(key))}
                                                   for name, (model, key) in PROVIDERS.items()}})
+        if not self._allowed():
+            return
         m = re.fullmatch(r"/api/trace/([\w-]+)", self.path)  # run ids are letters, digits and '-'
         if m and (TRACE_DIR / f"{m.group(1)}.jsonl").is_file():
             return self._send(200, (TRACE_DIR / f"{m.group(1)}.jsonl").read_bytes(), "application/x-ndjson",
@@ -64,6 +71,8 @@ class Handler(BaseHTTPRequestHandler):
         self._json(404, {"error": "not found"})
 
     def do_POST(self) -> None:
+        if not self._allowed():
+            return
         if self.path == "/api/upload":
             return self._upload()
         if self.path == "/api/ask":
@@ -125,6 +134,16 @@ class Handler(BaseHTTPRequestHandler):
 
     # ---- helpers ----
 
+    def _allowed(self) -> bool:
+        """Everything except the page and the health check needs the access code, when one is set.
+        Answers 401 itself if not. compare_digest: the check takes the same time however much of the code is right."""
+        given = self.headers.get("X-Access-Code") or ""
+        if not ACCESS_CODE or hmac.compare_digest(given.encode(), ACCESS_CODE.encode()):
+            return True
+        self._json(401, {"error": "This demo needs an access code: enter it at the top of the page." if not given
+                         else "Wrong access code."})
+        return False
+
     def _line(self, rec: dict) -> None:
         self.wfile.write((json.dumps(rec, ensure_ascii=False) + "\n").encode("utf-8"))
         self.wfile.flush()
@@ -145,17 +164,26 @@ class Handler(BaseHTTPRequestHandler):
         print(f"[server] {self.address_string()} {fmt % args}")
 
 
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """Defaults come from HOST / PORT when set (hosting platforms set them), else local-only on port 8000."""
+    parser = argparse.ArgumentParser(description="Chat UI backend for the budgeted document agent")
+    parser.add_argument("--host", default=os.getenv("HOST", "127.0.0.1"),  # 0.0.0.0 only inside a container
+                        help="127.0.0.1 = this machine only (default); 0.0.0.0 = reachable from the network")
+    parser.add_argument("--port", type=int, default=int(os.getenv("PORT", "8000")))
+    parser.add_argument("--trace-dir", default=str(TRACE_DIR))
+    return parser.parse_args(argv)
+
+
 def main() -> None:
     global TRACE_DIR
-    parser = argparse.ArgumentParser(description="Chat UI backend for the budgeted document agent")
-    parser.add_argument("--port", type=int, default=8000)
-    parser.add_argument("--trace-dir", default=str(TRACE_DIR))
-    args = parser.parse_args()
+    args = parse_args()
     TRACE_DIR = Path(args.trace_dir)
-    httpd = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)  # local only: not exposed to the network
-    print(f"Ledger is running: open http://127.0.0.1:{args.port}   (traces -> {TRACE_DIR}/)")
+    httpd = ThreadingHTTPServer((args.host, args.port), Handler)
+    shown = "127.0.0.1" if args.host == "0.0.0.0" else args.host
+    print(f"Ledger is running: open http://{shown}:{args.port}   (traces -> {TRACE_DIR}/)")
     keys = ", ".join(f"{var} {'set' if os.environ.get(var) else 'MISSING'}" for _, var in PROVIDERS.values())
     print(f"API keys: {keys}   (from the terminal or {harness.ENV_FILE.name}; values never shown)")
+    print(f"Access code: {'required' if ACCESS_CODE else 'off (open to anyone who can reach this server)'}")
     httpd.serve_forever()
 
 

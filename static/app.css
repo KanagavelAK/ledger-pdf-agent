@@ -38,6 +38,10 @@ h1 { margin: 0; font: 600 23px/1 var(--serif); letter-spacing: .5px; }
   padding: 8px 10px; border: 2px solid var(--ink); background: var(--card); color: var(--ink);
   font: 600 13px var(--mono); cursor: pointer;
 }
+.model-pick input {
+  width: 130px; padding: 8px 10px; border: 2px solid var(--ink); background: var(--card); color: var(--ink);
+  font: 600 13px var(--mono);
+}
 .upload-btn span {
   display: inline-block; padding: 8px 16px; border: 2px solid var(--ink); background: var(--card);
   font-weight: 600; cursor: pointer;

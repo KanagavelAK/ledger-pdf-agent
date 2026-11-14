@@ -8,11 +8,11 @@ and the code checks each quote word for word. When the document doesn't contain 
 Built in six hours by **The Tech Crowd** (Kanagavel A K and Gurumurthy S) at the RAP hackathon on agentic
 systems and harness design, October 2026.
 
-![Ledger answering a question with two cited pages and the live call ledger](docs/screenshots/01_answer_with_citations.png)
+![Demo: uploading a handbook and asking three questions; the call ledger fills in live](docs/demo.gif)
 
-*Page 3 of the handbook says the notice period is 30 days; an amendment on page 6 changes it to 60. Ledger read
-both pages, cited both, and verified each quote. The right-hand column is the call ledger: every model turn,
-tool call, rate-limit wait and check, live.*
+**[Watch the 66-second demo in full quality (MP4)](docs/demo.mp4)**. It shows three questions on the sample
+handbook: an answer spread over two pages where a later page changes the rule, a page that hides an
+instruction to the AI, and a question the document can't answer. API waits are sped up in the video.
 
 ## The challenge
 
@@ -75,6 +75,12 @@ At upload, running headers and contents pages are left out of the search index, 
 
 ## Screenshots
 
+![Ledger answering a question with two cited pages and the live call ledger](docs/screenshots/01_answer_with_citations.png)
+
+*Page 3 of the handbook says the notice period is 30 days; an amendment on page 6 changes it to 60. Ledger read
+both pages, cited both, and verified each quote. The right-hand column is the call ledger: every model turn,
+tool call, rate-limit wait and check, live.*
+
 | Instructions hidden in the PDF are flagged and ignored | Questions the document can't answer are declined |
 |---|---|
 | ![A page with an injected instruction flagged in the ledger](docs/screenshots/02_injection_ignored.png) | ![Insufficient information after searching parental, maternity and family](docs/screenshots/03_insufficient_information.png) |
@@ -115,16 +121,32 @@ From the command line, one question with every step printed:
 python harness.py samples/ACME_Employee_Handbook.pdf "What is the notice period for employees?"
 ```
 
+## Deploy a demo (Docker or Hugging Face Spaces)
+
+The repo includes a `Dockerfile`. A hosted copy uses your API key, so protect it with an access code: when
+`DEMO_ACCESS_CODE` is set, uploading, asking and downloading traces all need the code (the page asks for it),
+and the server only ever reports whether a code is required.
+
+```bash
+docker build -t ledger .
+docker run -p 7860:7860 -e GROQ_API_KEY=... -e DEMO_ACCESS_CODE=choose-a-code ledger
+```
+
+On **Hugging Face Spaces**: create a Space with the Docker SDK, push this repo's files to it with
+`deploy/huggingface/README.md` as its `README.md` (that file carries the Space settings), and add
+`GROQ_API_KEY`, `DEMO_ACCESS_CODE` and optionally `GEMINI_API_KEY` under *Settings → Variables and secrets*.
+
 ## Tests
 
 ```bash
-python run_tests.py          # 63 offline checks, no API key needed
+python run_tests.py          # 64 offline checks, no API key needed
 python run_tests.py --live   # 9 cases against the real model (needs GROQ_API_KEY)
 ```
 
 The offline suite replays scripted model replies through the real harness: the 7th call refused, repeats
 blocked, made-up quotes downgraded, injected text flagged, hidden text never citable, unusual PDF layouts, API
-errors and rate limits, and the HTTP backend end to end. Test PDFs are generated in code with PyMuPDF.
+errors and rate limits, the HTTP backend end to end, and the hosted demo's access code. Test PDFs are generated
+in code with PyMuPDF.
 
 ## Tech stack
 
@@ -152,8 +174,10 @@ server.py           web backend: upload, streamed answers, traces, health check
 static/             the "Ledger" UI
 run_tests.py        offline and live tests
 check_models.py     which Groq models a key can use, and their rate limits
+Dockerfile          container for hosting a demo
+deploy/huggingface/ the Hugging Face Space card (settings + description)
 samples/            a small handbook PDF to try
-docs/screenshots/   the images in this README
+docs/               demo video, GIF and screenshots
 ARCHITECTURE.md     the full design, decisions and lessons from live runs
 MEMO.md             the one-page memo submitted to the judges
 ```
@@ -181,7 +205,8 @@ the bugs only ever appeared with the real model:
 - Table cells that the PDF stores as separate blocks come out one per line.
 - "The later statement wins" is guided by the prompt, not enforced in code.
 - Strict quote matching can reject a correct paraphrase; we chose declining over guessing.
-- Single user: documents are kept in memory and the server is meant for local use.
+- Single user: documents are kept in memory and shared by everyone using the same server, so a hosted demo
+  should be protected with an access code and shared only with people you trust.
 - On Groq's free tier (8,000 tokens a minute), hard questions can take 30–70 seconds because of rate-limit
   waits.
 
