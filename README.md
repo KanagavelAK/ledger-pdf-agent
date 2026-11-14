@@ -66,6 +66,63 @@ flowchart LR
 The PDF is parsed once at upload. That builds the tools' backend; the model sees nothing until it calls a tool
 during a question, and each question starts with a fresh budget and an empty evidence ledger.
 
+## The agent loop and the harness
+
+The **agent** is the LLM deciding what to read next. The **harness** is the plain-Python code around it that
+decides what the agent is allowed to do, and whether its answer is accepted. All of it is in `run_agent()` in
+[harness.py](harness.py), with no agent framework.
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant H as Harness (run_agent)
+    participant M as LLM (gpt-oss-120b)
+    participant T as 4 tools + doc store
+    U->>H: question
+    H->>H: input check
+    loop until the model answers (max 6 tool calls)
+        H->>M: conversation so far + tool schemas
+        M-->>H: tool call(s), e.g. search_keyword("notice period")
+        H->>H: budget gate: repeat? over budget?
+        H->>T: run the tool (logged)
+        T-->>H: page numbers / headings / page text
+        H->>H: wrap as untrusted text, flag injections, add "N calls left"
+    end
+    M-->>H: final answer (JSON with citations)
+    H->>H: format check + evidence check
+    H-->>U: answer with citations, or "insufficient information"
+```
+
+One question, step by step:
+
+1. **Check the input.** Empty, oversized or injection-style questions are rejected before the model is called.
+2. **Ask the model.** It gets the system prompt, the document ID, the question and every tool result so far.
+   The prompt guides strategy: search the most specific term, read pages found by two searches, check the last
+   hit for amendments, batch independent calls, decline early when nothing matches.
+3. **Gate each tool call.** Repeats are blocked without counting; a call over budget never runs; the rest run
+   through the call logger and use one of the 6 reads.
+4. **Return the result safely.** Page text comes back fenced as untrusted document content, lines aimed at an
+   AI are flagged, hidden text is marked, and the remaining budget is appended. Pages read are added to the
+   question's evidence ledger.
+5. **Repeat** until the model replies with a final answer, or until the harness forces one (budget used, 75 s
+   passed, two blocked repeats, or the last of ten turns) by calling the model with `tool_choice="none"`.
+6. **Check the answer.** The JSON must have the right fields; every quote must be on a page in the ledger. One
+   fix attempt, then the answer becomes "insufficient information".
+7. **Record everything.** Every step is written to a JSONL trace and streamed live to the UI's call ledger.
+
+| Harness part | What it guarantees | Where in `harness.py` |
+|---|---|---|
+| Input check | Bad or injected questions never reach the model | `validate_input` |
+| Tool registry + call logger | Only the 4 tools exist; every call that reaches one is recorded | `@tool`, `log_calls`, `dispatch` |
+| Budget gate | At most 6 counted calls; repeats blocked and not counted | `Budget`, `call_key`, `run_agent` |
+| Untrusted-text wrapper | Document text is data, never instructions | `wrap_observation`, `flag_injections` |
+| Forced answer | Every run ends with an answer, never a hang | `force_reason` (`tool_choice="none"`) |
+| Format and evidence checks | No uncited or made-up claims are shown | `parse_final`, `verify_citations`, `decline` |
+| Reliability | Rate limits paced, temporary errors retried, deadlines | `GroqLLM.pace`, `retry_delay`, `SOFT/HARD_DEADLINE_S` |
+| Swappable model | Groq or the Gemini backup behind one interface | `make_llm`, `gemini_llm.py` |
+| Trace | Every model turn, call, wait and check recorded | `Trace` |
+| Offline testing | The whole loop runs against scripted model replies | `ScriptedLLM`, `run_tests.py` |
+
 ## The four tools
 
 | Tool | Returns | How it works |
