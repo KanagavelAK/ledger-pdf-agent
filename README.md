@@ -1,5 +1,9 @@
 # Ledger: a budgeted document-answering agent
 
+**[▶ Try the live demo](https://ledger-pdf-agent.onrender.com/)**: free hosting, so the first visit can take up
+to a minute to wake the server. Download the [sample handbook](samples/ACME_Employee_Handbook.pdf) to try it,
+and please don't upload private documents: everyone shares one demo server.
+
 Upload any PDF and ask questions about it. An LLM agent finds the answer by reading the document through
 **four tools and at most six reads per question**. Every claim it makes is quoted from a page it actually read,
 and the code checks each quote word for word. When the document doesn't contain the answer, it says
