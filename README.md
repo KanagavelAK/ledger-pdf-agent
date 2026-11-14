@@ -132,7 +132,7 @@ docker build -t ledger .
 docker run -p 7860:7860 -e GROQ_API_KEY=... -e DEMO_ACCESS_CODE=choose-a-code ledger
 ```
 
-On **Hugging Face Spaces**: create a Space with the Docker SDK (blank template), add `GROQ_API_KEY`,
+On **Hugging Face Spaces**: create a Space with the **Gradio** SDK (Docker Spaces are paid; `app.py` starts our own server on the port a Gradio Space serves), add `GROQ_API_KEY`,
 `DEMO_ACCESS_CODE` and optionally `GEMINI_API_KEY` under *Settings → Variables and secrets*, then push:
 
 ```powershell
@@ -181,7 +181,8 @@ server.py           web backend: upload, streamed answers, traces, health check
 static/             the "Ledger" UI
 run_tests.py        offline and live tests
 check_models.py     which Groq models a key can use, and their rate limits
-Dockerfile          container for hosting a demo
+app.py              Hugging Face Space entry point (starts server.py on port 7860)
+Dockerfile          container for hosting a demo elsewhere
 deploy/huggingface/ the Hugging Face Space card (settings + description)
 samples/            a small handbook PDF to try
 docs/               demo video, GIF and screenshots

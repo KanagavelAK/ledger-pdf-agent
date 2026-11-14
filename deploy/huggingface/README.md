@@ -3,8 +3,10 @@ title: Ledger PDF Agent
 emoji: 📒
 colorFrom: gray
 colorTo: yellow
-sdk: docker
-app_port: 7860
+sdk: gradio
+sdk_version: 5.9.1
+python_version: "3.11"
+app_file: app.py
 pinned: false
 short_description: Answers from any PDF in 6 reads, every claim quoted
 ---
