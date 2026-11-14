@@ -132,6 +132,8 @@ docker build -t ledger .
 docker run -p 7860:7860 -e GROQ_API_KEY=... -e DEMO_ACCESS_CODE=choose-a-code ledger
 ```
 
+On **Render** (free): New → Blueprint → pick this repo; `render.yaml` sets everything up and asks for `GROQ_API_KEY`, `DEMO_ACCESS_CODE` and optionally `GEMINI_API_KEY`.
+
 On **Hugging Face Spaces**: create a Space with the **Gradio** SDK (Docker Spaces are paid; `app.py` starts our own server on the port a Gradio Space serves), add `GROQ_API_KEY`,
 `DEMO_ACCESS_CODE` and optionally `GEMINI_API_KEY` under *Settings → Variables and secrets*, then push:
 
